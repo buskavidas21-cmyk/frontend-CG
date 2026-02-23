@@ -17,6 +17,8 @@ const UserManagement = () => {
     const [showModal, setShowModal] = useState(false);
     const [editingUser, setEditingUser] = useState(null);
     const [showPassword, setShowPassword] = useState(false);
+    const [submitting, setSubmitting] = useState(false);
+    const [deletingId, setDeletingId] = useState(null);
 
     const [formData, setFormData] = useState({
         name: '',
@@ -61,6 +63,7 @@ const UserManagement = () => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        setSubmitting(true);
         try {
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
 
@@ -81,12 +84,14 @@ const UserManagement = () => {
         } catch (error) {
             console.error(error);
             toast.error(error.response?.data?.message || 'Operation failed');
+        } finally {
+            setSubmitting(false);
         }
     };
 
     const handleDelete = async (userId) => {
         if (!window.confirm('Are you sure you want to delete this user?')) return;
-
+        setDeletingId(userId);
         try {
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
             await axios.delete(`${apiBaseUrl}/users/${userId}`, config);
@@ -95,6 +100,8 @@ const UserManagement = () => {
         } catch (error) {
             console.error(error);
             toast.error('Failed to delete user');
+        } finally {
+            setDeletingId(null);
         }
     };
 
@@ -189,8 +196,9 @@ const UserManagement = () => {
                                     onClick={() => handleDelete(u._id)}
                                     className="action-btn delete"
                                     title="Delete User"
+                                    disabled={deletingId === u._id}
                                 >
-                                    <Trash2 size={18} />
+                                    {deletingId === u._id ? <LoadingSpinner type="three-dots" color="#ef4444" height={18} width={30} inline /> : <Trash2 size={18} />}
                                 </button>
                             )}
                         </div>
@@ -298,8 +306,12 @@ const UserManagement = () => {
                                 <button type="button" onClick={() => setShowModal(false)} className="btn btn-secondary">
                                     Cancel
                                 </button>
-                                <button type="submit" className="btn btn-primary">
-                                    <Save size={18} /> {editingUser ? 'Update User' : 'Create User'}
+                                <button type="submit" className="btn btn-primary" disabled={submitting}>
+                                    {submitting ? (
+                                        <><LoadingSpinner type="three-dots" color="#fff" height={18} width={30} inline /> {editingUser ? 'Updating...' : 'Creating...'}</>
+                                    ) : (
+                                        <><Save size={18} /> {editingUser ? 'Update User' : 'Create User'}</>
+                                    )}
                                 </button>
                             </div>
                         </form>

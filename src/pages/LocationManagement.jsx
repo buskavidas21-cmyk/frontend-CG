@@ -14,6 +14,8 @@ const LocationManagement = () => {
     const [loading, setLoading] = useState(true);
     const [showForm, setShowForm] = useState(false);
     const [editingLocation, setEditingLocation] = useState(null);
+    const [submitting, setSubmitting] = useState(false);
+    const [deletingId, setDeletingId] = useState(null);
     const [formData, setFormData] = useState({
         name: '',
         type: 'building',
@@ -43,6 +45,7 @@ const LocationManagement = () => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        setSubmitting(true);
         try {
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
             if (editingLocation) {
@@ -59,6 +62,8 @@ const LocationManagement = () => {
         } catch (error) {
             console.error(error);
             toast.error('Failed to save location');
+        } finally {
+            setSubmitting(false);
         }
     };
 
@@ -75,6 +80,7 @@ const LocationManagement = () => {
 
     const handleDelete = async (id) => {
         if (!window.confirm('Are you sure you want to delete this location?')) return;
+        setDeletingId(id);
         try {
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
             await axios.delete(`${apiBaseUrl}/locations/${id}`, config);
@@ -83,6 +89,8 @@ const LocationManagement = () => {
         } catch (error) {
             console.error(error);
             toast.error('Failed to delete location');
+        } finally {
+            setDeletingId(null);
         }
     };
 
@@ -120,7 +128,13 @@ const LocationManagement = () => {
                             >
                                 <option value="building">Building</option>
                                 <option value="floor">Floor</option>
-                                <option value="room">Room</option>
+                                <option value="area">Area</option>
+                                <option value="office">Office</option>
+                                <option value="retail">Retail</option>
+                                <option value="warehouse">Warehouse</option>
+                                <option value="restroom">Restroom</option>
+                                <option value="healthcare">Healthcare</option>
+                                <option value="client">Client</option>
                             </select>
                         </div>
                         <div className="form-group">
@@ -140,8 +154,8 @@ const LocationManagement = () => {
                             }}>
                                 Cancel
                             </button>
-                            <button type="submit" className="btn btn-primary">
-                                {editingLocation ? 'Update' : 'Create'}
+                            <button type="submit" className="btn btn-primary" disabled={submitting}>
+                                {submitting ? (editingLocation ? 'Updating...' : 'Creating...') : (editingLocation ? 'Update' : 'Create')}
                             </button>
                         </div>
                     </form>
@@ -157,8 +171,8 @@ const LocationManagement = () => {
                                 <button className="icon-btn" onClick={() => handleEdit(location)}>
                                     <Pencil size={16} />
                                 </button>
-                                <button className="icon-btn delete" onClick={() => handleDelete(location._id)}>
-                                    <Trash2 size={16} />
+                                <button className="icon-btn delete" onClick={() => handleDelete(location._id)} disabled={deletingId === location._id}>
+                                    {deletingId === location._id ? <LoadingSpinner type="three-dots" color="#dc2626" height={16} width={30} inline /> : <Trash2 size={16} />}
                                 </button>
                             </div>
                         </div>

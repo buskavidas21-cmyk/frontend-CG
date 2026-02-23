@@ -5,6 +5,7 @@ import AuthContext from '../context/AuthContext';
 import { apiBaseUrl } from '../config/api';
 import toast from 'react-hot-toast';
 import { ArrowLeft, Save } from 'lucide-react';
+import LoadingSpinner from '../components/LoadingSpinner';
 
 const TicketForm = () => {
     const { user } = useContext(AuthContext);
@@ -13,6 +14,8 @@ const TicketForm = () => {
 
     const [locations, setLocations] = useState([]);
     const [users, setUsers] = useState([]);
+    const [fetchLoading, setFetchLoading] = useState(true);
+    const [submitting, setSubmitting] = useState(false);
     const [formData, setFormData] = useState({
         title: '',
         description: '',
@@ -39,42 +42,32 @@ const TicketForm = () => {
     }, [location.state]);
 
     useEffect(() => {
-        const fetchLocations = async () => {
+        const fetchData = async () => {
             if (!user || !user.token) return;
+            setFetchLoading(true);
             try {
                 const config = {
                     headers: { Authorization: `Bearer ${user.token}` },
                 };
-                const { data } = await axios.get(`${apiBaseUrl}/locations`, config);
-                setLocations(data);
+                const [locRes, usersRes] = await Promise.all([
+                    axios.get(`${apiBaseUrl}/locations`, config),
+                    axios.get(`${apiBaseUrl}/users`, config),
+                ]);
+                setLocations(locRes.data);
+                setUsers(usersRes.data);
             } catch (error) {
                 console.error(error);
-                toast.error('Failed to load locations');
+                toast.error('Failed to load form data');
+            } finally {
+                setFetchLoading(false);
             }
         };
-        fetchLocations();
-    }, [user]);
-
-    useEffect(() => {
-        const fetchUsers = async () => {
-            if (!user || !user.token) return;
-            try {
-                const config = {
-                    headers: { Authorization: `Bearer ${user.token}` },
-                };
-                const { data } = await axios.get(`${apiBaseUrl}/users`, config);
-                console.log('Fetched users:', data);
-                setUsers(data);
-            } catch (error) {
-                console.error('Error fetching users:', error);
-                toast.error('Failed to load users for assignment');
-            }
-        };
-        fetchUsers();
+        fetchData();
     }, [user]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        setSubmitting(true);
         try {
             const config = {
                 headers: { Authorization: `Bearer ${user.token}` },
@@ -90,8 +83,11 @@ const TicketForm = () => {
         } catch (error) {
             console.error(error);
             toast.error('Failed to create ticket');
+            setSubmitting(false);
         }
     };
+
+    if (fetchLoading) return <LoadingSpinner message="Loading form data..." type="three-dots" color="#3b82f6" height={60} width={60} />;
 
     return (
         <div className="ticket-form-container">
@@ -195,8 +191,12 @@ const TicketForm = () => {
                     ></textarea>
                 </div>
 
-                <button type="submit" className="btn btn-primary btn-block">
-                    <Save size={18} /> Create Ticket
+                <button type="submit" className="btn btn-primary btn-block" disabled={submitting}>
+                    {submitting ? (
+                        <><LoadingSpinner type="three-dots" color="#fff" height={20} width={40} inline /> Creating...</>
+                    ) : (
+                        <><Save size={18} /> Create Ticket</>
+                    )}
                 </button>
             </form>
 

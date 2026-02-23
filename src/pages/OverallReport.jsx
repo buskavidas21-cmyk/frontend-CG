@@ -19,6 +19,7 @@ const OverallReport = () => {
     const [endDate, setEndDate] = useState(new Date());
     const [locationFilter, setLocationFilter] = useState('all');
     const [locations, setLocations] = useState([]);
+    const [exporting, setExporting] = useState(false);
 
     useEffect(() => {
         fetchLocations();
@@ -57,6 +58,7 @@ const OverallReport = () => {
     };
 
     const handleExport = async () => {
+        setExporting(true);
         try {
             const config = {
                 headers: { Authorization: `Bearer ${user.token}` },
@@ -82,6 +84,8 @@ const OverallReport = () => {
         } catch (error) {
             console.error(error);
             toast.error('Failed to export report');
+        } finally {
+            setExporting(false);
         }
     };
 
@@ -142,6 +146,7 @@ const OverallReport = () => {
                     <button 
                         onClick={handleExport} 
                         className="btn"
+                        disabled={exporting}
                         style={{
                             padding: '12px 24px',
                             background: 'white',
@@ -154,11 +159,15 @@ const OverallReport = () => {
                             transition: 'all 0.2s',
                             display: 'flex',
                             alignItems: 'center',
-                            gap: '8px'
+                            gap: '8px',
+                            opacity: exporting ? 0.7 : 1,
+                            cursor: exporting ? 'not-allowed' : 'pointer'
                         }}
                         onMouseEnter={(e) => {
-                            e.currentTarget.style.transform = 'translateY(-2px)';
-                            e.currentTarget.style.boxShadow = '0 6px 12px -1px rgba(0, 0, 0, 0.15)';
+                            if (!exporting) {
+                                e.currentTarget.style.transform = 'translateY(-2px)';
+                                e.currentTarget.style.boxShadow = '0 6px 12px -1px rgba(0, 0, 0, 0.15)';
+                            }
                         }}
                         onMouseLeave={(e) => {
                             e.currentTarget.style.transform = 'translateY(0)';
@@ -166,7 +175,7 @@ const OverallReport = () => {
                         }}
                     >
                         <Download size={20} />
-                        Export Report
+                        {exporting ? 'Exporting...' : 'Export Report'}
                     </button>
                 </div>
             </div>

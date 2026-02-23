@@ -14,9 +14,11 @@ const InspectionDetails = () => {
     const [inspection, setInspection] = useState(null);
     const [loading, setLoading] = useState(true);
     const [showBulkModal, setShowBulkModal] = useState(false);
-    const [showAssignModal, setShowAssignModal] = useState(false); // For re-assign
-    const [users, setUsers] = useState([]); // For re-assign
+    const [showAssignModal, setShowAssignModal] = useState(false);
+    const [users, setUsers] = useState([]);
     const [selectedInspector, setSelectedInspector] = useState('');
+    const [reassigning, setReassigning] = useState(false);
+    const [downloadingPdf, setDownloadingPdf] = useState(false);
 
     useEffect(() => {
         const fetchInspection = async () => {
@@ -61,11 +63,11 @@ const InspectionDetails = () => {
     };
 
     const handleReassign = async () => {
+        setReassigning(true);
         try {
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
             await axios.put(`${apiBaseUrl}/inspections/${id}`, { ...inspection, inspector: selectedInspector, status: 'pending' }, config);
 
-            // Update local state
             const inspectorObj = users.find(u => u._id === selectedInspector);
             setInspection({ ...inspection, inspector: inspectorObj, status: 'pending' });
 
@@ -74,10 +76,13 @@ const InspectionDetails = () => {
         } catch (error) {
             console.error(error);
             toast.error('Failed to re-assign inspector');
+        } finally {
+            setReassigning(false);
         }
     };
 
     const handleDownloadPDF = async () => {
+        setDownloadingPdf(true);
         try {
             const config = {
                 headers: { Authorization: `Bearer ${user.token}` },
@@ -96,6 +101,8 @@ const InspectionDetails = () => {
         } catch (error) {
             console.error(error);
             toast.error('Failed to download PDF');
+        } finally {
+            setDownloadingPdf(false);
         }
     };
 
@@ -197,8 +204,8 @@ const InspectionDetails = () => {
                         </button>
                     )}
 
-                    <button onClick={handleDownloadPDF} className="btn btn-primary">
-                        <Download size={18} /> Download PDF
+                    <button onClick={handleDownloadPDF} className="btn btn-primary" disabled={downloadingPdf}>
+                        <Download size={18} /> {downloadingPdf ? 'Downloading...' : 'Download PDF'}
                     </button>
                 </div>
             </div>
@@ -324,8 +331,10 @@ const InspectionDetails = () => {
                             </select>
                         </div>
                         <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-                            <button className="btn btn-secondary" onClick={() => setShowAssignModal(false)}>Cancel</button>
-                            <button className="btn btn-primary" onClick={handleReassign}>Save Changes</button>
+                            <button className="btn btn-secondary" onClick={() => setShowAssignModal(false)} disabled={reassigning}>Cancel</button>
+                            <button className="btn btn-primary" onClick={handleReassign} disabled={reassigning}>
+                                {reassigning ? 'Saving...' : 'Save Changes'}
+                            </button>
                         </div>
                     </div>
                 </div>

@@ -26,6 +26,7 @@ const TicketList = () => {
   const [assignModal, setAssignModal] = useState(null);
   const [scheduleModal, setScheduleModal] = useState(null);
   const [resolveModal, setResolveModal] = useState(null);
+  const [startingWorkId, setStartingWorkId] = useState(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -689,11 +690,12 @@ const TicketList = () => {
                       <button
                         onClick={async (e) => {
                           e.stopPropagation();
+                          setStartingWorkId(ticket._id);
                           try {
                             const config = { headers: { Authorization: `Bearer ${user.token}` } };
                             await axios.put(`${apiBaseUrl}/tickets/${ticket._id}`, {
                               ...ticket,
-                              location: ticket.location._id, // Ensure ID is sent
+                              location: ticket.location._id,
                               status: 'in_progress'
                             }, config);
                             toast.success('Ticket status updated to In Progress!');
@@ -701,23 +703,26 @@ const TicketList = () => {
                           } catch (error) {
                             console.error(error);
                             toast.error('Failed to update ticket status');
+                          } finally {
+                            setStartingWorkId(null);
                           }
                         }}
                         title="Start Work"
+                        disabled={startingWorkId === ticket._id}
                         style={{
                           padding: '10px',
-                          background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+                          background: startingWorkId === ticket._id ? '#93c5fd' : 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
                           color: 'white',
                           border: 'none',
                           borderRadius: '10px',
-                          cursor: 'pointer',
+                          cursor: startingWorkId === ticket._id ? 'not-allowed' : 'pointer',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
                           boxShadow: '0 2px 4px rgba(59, 130, 246, 0.3)'
                         }}
                       >
-                        <Clock size={18} />
+                        {startingWorkId === ticket._id ? <LoadingSpinner type="three-dots" color="#fff" height={18} width={30} inline /> : <Clock size={18} />}
                       </button>
                       <button
                         onClick={(e) => { e.stopPropagation(); setResolveModal(ticket); }}

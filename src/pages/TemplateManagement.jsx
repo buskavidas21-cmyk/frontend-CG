@@ -12,6 +12,7 @@ const TemplateManagement = () => {
     const navigate = useNavigate();
     const [templates, setTemplates] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [actionId, setActionId] = useState(null);
 
     useEffect(() => {
         if (user?.role !== 'admin' && user?.role !== 'sub_admin') {
@@ -36,6 +37,7 @@ const TemplateManagement = () => {
 
     const handleDelete = async (id) => {
         if (!window.confirm('Are you sure you want to delete this template?')) return;
+        setActionId(`del-${id}`);
         try {
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
             await axios.delete(`${apiBaseUrl}/templates/${id}`, config);
@@ -44,10 +46,13 @@ const TemplateManagement = () => {
         } catch (error) {
             console.error(error);
             toast.error('Failed to delete template');
+        } finally {
+            setActionId(null);
         }
     };
 
     const handleClone = async (template) => {
+        setActionId(`clone-${template._id}`);
         try {
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
             const clonedData = {
@@ -61,6 +66,8 @@ const TemplateManagement = () => {
         } catch (error) {
             console.error(error);
             toast.error('Failed to clone template');
+        } finally {
+            setActionId(null);
         }
     };
 
@@ -81,14 +88,14 @@ const TemplateManagement = () => {
                         <div className="template-header">
                             <h3>{template.name}</h3>
                             <div className="template-actions">
-                                <button className="icon-btn" onClick={() => handleClone(template)} title="Clone">
-                                    <Copy size={16} />
+                                <button className="icon-btn" onClick={() => handleClone(template)} title="Clone" disabled={actionId === `clone-${template._id}`}>
+                                    {actionId === `clone-${template._id}` ? <LoadingSpinner type="three-dots" color="#3b82f6" height={16} width={30} inline /> : <Copy size={16} />}
                                 </button>
                                 <button className="icon-btn" onClick={() => navigate(`/templates/edit/${template._id}`)} title="Edit">
                                     <Pencil size={16} />
                                 </button>
-                                <button className="icon-btn delete" onClick={() => handleDelete(template._id)} title="Delete">
-                                    <Trash2 size={16} />
+                                <button className="icon-btn delete" onClick={() => handleDelete(template._id)} title="Delete" disabled={actionId === `del-${template._id}`}>
+                                    {actionId === `del-${template._id}` ? <LoadingSpinner type="three-dots" color="#dc2626" height={16} width={30} inline /> : <Trash2 size={16} />}
                                 </button>
                             </div>
                         </div>

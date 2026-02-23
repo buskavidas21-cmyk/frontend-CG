@@ -28,14 +28,14 @@ const Reports = () => {
             color: 'from-yellow-500 to-orange-500',
             route: '/reports/inspectors'
         },
-        {
-            id: 'private',
-            title: 'Private Inspections Report',
-            description: 'How is my team doing internally?',
-            icon: <Lock size={32} />,
-            color: 'from-purple-500 to-indigo-500',
-            route: '/reports/private-inspections'
-        },
+        // {
+        //     id: 'private',
+        //     title: 'Private Inspections Report',
+        //     description: 'How is my team doing internally?',
+        //     icon: <Lock size={32} />,
+        //     color: 'from-purple-500 to-indigo-500',
+        //     route: '/reports/private-inspections'
+        // },
         {
             id: 'forms',
             title: 'Inspection Forms Report',

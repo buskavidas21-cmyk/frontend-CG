@@ -5,6 +5,7 @@ import AuthContext from '../context/AuthContext';
 import { apiBaseUrl } from '../config/api';
 import toast from 'react-hot-toast';
 import { ClipboardList, ArrowLeft, Save } from 'lucide-react';
+import LoadingSpinner from '../components/LoadingSpinner';
 
 const CreateInspection = () => {
     const { user } = useContext(AuthContext);
@@ -12,6 +13,8 @@ const CreateInspection = () => {
     const [templates, setTemplates] = useState([]);
     const [locations, setLocations] = useState([]);
     const [users, setUsers] = useState([]);
+    const [fetchLoading, setFetchLoading] = useState(true);
+    const [submitting, setSubmitting] = useState(false);
     const [formData, setFormData] = useState({
         template: '',
         location: '',
@@ -27,6 +30,7 @@ const CreateInspection = () => {
     }, [user, navigate]);
 
     const fetchData = async () => {
+        setFetchLoading(true);
         try {
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
             const [templatesRes, locationsRes, usersRes] = await Promise.all([
@@ -40,11 +44,16 @@ const CreateInspection = () => {
         } catch (error) {
             console.error(error);
             toast.error('Failed to load data');
+        } finally {
+            setFetchLoading(false);
         }
     };
 
+    if (fetchLoading) return <LoadingSpinner message="Loading form data..." type="three-dots" color="#3b82f6" height={60} width={60} />;
+
     const handleSubmit = async (e) => {
         e.preventDefault();
+        setSubmitting(true);
         try {
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
 
@@ -88,6 +97,7 @@ const CreateInspection = () => {
             console.error('Error creating inspection:', error);
             const errorMsg = error.response?.data?.message || error.message || 'Failed to create inspection';
             toast.error(errorMsg);
+            setSubmitting(false);
         }
     };
 
@@ -146,8 +156,12 @@ const CreateInspection = () => {
                     </select>
                 </div>
 
-                <button type="submit" className="btn btn-primary btn-block">
-                    <Save size={18} /> Create Inspection
+                <button type="submit" className="btn btn-primary btn-block" disabled={submitting}>
+                    {submitting ? (
+                        <><LoadingSpinner type="three-dots" color="#fff" height={20} width={40} inline /> Creating...</>
+                    ) : (
+                        <><Save size={18} /> Create Inspection</>
+                    )}
                 </button>
             </form>
 

@@ -6,7 +6,8 @@ const LoadingSpinner = ({
     type = 'three-dots',
     color = '#3b82f6',
     height = 80,
-    width = 80
+    width = 80,
+    inline = false
 }) => {
     const renderSpinner = () => {
         const commonProps = {
@@ -31,6 +32,10 @@ const LoadingSpinner = ({
                 return <ThreeDots {...commonProps} radius="9" />;
         }
     };
+
+    if (inline) {
+        return <span style={{ display: 'inline-flex', alignItems: 'center', verticalAlign: 'middle' }}>{renderSpinner()}</span>;
+    }
 
     return (
         <div className="loading-container">

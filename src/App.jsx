@@ -27,6 +27,7 @@ import PrivateInspectionsReport from './pages/PrivateInspectionsReport';
 import InspectionFormsReport from './pages/InspectionFormsReport';
 import More from './pages/More';
 import StartWork from './pages/StartWork';
+import WorkStats from './pages/WorkStats';
 import NotFound from './pages/NotFound';
 import { Toaster } from 'react-hot-toast';
 
@@ -64,6 +65,7 @@ function App() {
           <Route path="/help" element={<PrivateRoute><Layout><HelpSupport /></Layout></PrivateRoute>} />
           <Route path="/more" element={<PrivateRoute><Layout><More /></Layout></PrivateRoute>} />
           <Route path="/start-work" element={<PrivateRoute><Layout><StartWork /></Layout></PrivateRoute>} />
+          <Route path="/work-stats" element={<PrivateRoute><Layout><WorkStats /></Layout></PrivateRoute>} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </Router>
