@@ -27,9 +27,35 @@ const ImprovedInspectionWizard = () => {
     const [template, setTemplate] = useState(null);
     const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
     const [responses, setResponses] = useState({});
+    const [sectionPromptValues, setSectionPromptValues] = useState({});
     const [showTicketPrompt, setShowTicketPrompt] = useState(null);
     const [createdTickets, setCreatedTickets] = useState([]);
     const [loading, setLoading] = useState(!!id);
+
+    const getResponseKey = (sectionId, itemId, subsectionId = null) =>
+        subsectionId ? `${sectionId}-${subsectionId}-${itemId}` : `${sectionId}-${itemId}`;
+    const getSectionPromptKey = (sectionId) => `section-prompt-${sectionId}`;
+
+    const findItemContext = (sectionId, itemId, subsectionId = null) => {
+        const section = template?.sections?.find(s => s._id === sectionId);
+        if (!section) return null;
+
+        if (subsectionId) {
+            const subsection = (section.subsections || []).find(ss => ss._id === subsectionId);
+            const item = subsection?.items?.find(i => i._id === itemId);
+            if (!item) return null;
+            return { section, subsection, item };
+        }
+
+        const directItem = (section.items || []).find(i => i._id === itemId);
+        if (directItem) return { section, subsection: null, item: directItem };
+
+        for (const subsection of section.subsections || []) {
+            const nestedItem = subsection.items?.find(i => i._id === itemId);
+            if (nestedItem) return { section, subsection, item: nestedItem };
+        }
+        return null;
+    };
 
     useEffect(() => {
         const fetchData = async () => {
@@ -67,10 +93,21 @@ const ImprovedInspectionWizard = () => {
                             sections: inspection.sections.map(s => ({
                                 ...s,
                                 _id: s.sectionId || s._id,
+                                sectionPrompt: s.sectionPrompt || undefined,
                                 items: s.items.map(i => ({
                                     ...i,
                                     _id: i.itemId || i._id
-                                }))
+                                })),
+                                subsections: (s.subsections || []).map(ss => ({
+                                    ...ss,
+                                    _id: ss.subsectionId || ss._id,
+                                    parentItemId: ss.parentItemId || null,
+                                    parentItemIndex: typeof ss.parentItemIndex === 'number' ? ss.parentItemIndex : null,
+                                    items: (ss.items || []).map(i => ({
+                                        ...i,
+                                        _id: i.itemId || i._id,
+                                    })),
+                                })),
                             }))
                         };
                     } else if (inspection.template && inspection.template.sections && inspection.template.sections.length > 0) {
@@ -99,16 +136,30 @@ const ImprovedInspectionWizard = () => {
 
                     // Map existing sections/items to responses
                     const initialResponses = {};
+                    const initialSectionPrompts = {};
                     inspection.sections.forEach(section => {
-                        section.items.forEach(item => {
-                            initialResponses[`${section.sectionId}-${item.itemId}`] = {
+                        if (section.sectionPrompt?.label) {
+                            initialSectionPrompts[getSectionPromptKey(section.sectionId)] = section.sectionPrompt.value || '';
+                        }
+                        (section.items || []).forEach(item => {
+                            initialResponses[getResponseKey(section.sectionId, item.itemId)] = {
                                 value: item.status === 'fail' ? 'fail' : (item.score || 'pass'),
                                 comment: item.comment,
                                 photos: item.photos
                             };
                         });
+                        (section.subsections || []).forEach(subsection => {
+                            (subsection.items || []).forEach(item => {
+                                initialResponses[getResponseKey(section.sectionId, item.itemId, subsection.subsectionId)] = {
+                                    value: item.status === 'fail' ? 'fail' : (item.score || 'pass'),
+                                    comment: item.comment,
+                                    photos: item.photos,
+                                };
+                            });
+                        });
                     });
                     setResponses(initialResponses);
+                    setSectionPromptValues(initialSectionPrompts);
 
                     setStep(2); // Skip to execution step
                     setLoading(false);
@@ -147,6 +198,13 @@ const ImprovedInspectionWizard = () => {
         }
         const temp = templates.find(t => t._id === selectedTemplate);
         setTemplate(temp);
+        const initialPromptValues = {};
+        (temp?.sections || []).forEach(section => {
+            if (section.sectionPrompt?.label) {
+                initialPromptValues[getSectionPromptKey(section._id)] = '';
+            }
+        });
+        setSectionPromptValues(initialPromptValues);
 
         if (!performNow) {
             await createAssignedInspection(temp);
@@ -166,12 +224,36 @@ const ImprovedInspectionWizard = () => {
                 sections: temp.sections.map((section) => ({
                     sectionId: section._id,
                     name: section.name,
-                    items: section.items.map((item) => ({
+                    sectionPrompt: section.sectionPrompt?.label
+                        ? {
+                              label: section.sectionPrompt.label,
+                              placeholder: section.sectionPrompt.placeholder || 'Add comment...',
+                              required: Boolean(section.sectionPrompt.required),
+                              value: '',
+                          }
+                        : undefined,
+                    items: (section.items || []).map((item) => ({
                         itemId: item._id,
                         name: item.name,
                         score: null,
                         comment: '',
                         status: 'pass', // Default status
+                    })),
+                    subsections: (section.subsections || []).map((subsection) => ({
+                        subsectionId: subsection._id,
+                        name: subsection.name,
+                        parentItemId:
+                            typeof subsection.parentItemIndex === 'number' && (section.items || [])[subsection.parentItemIndex]
+                                ? (section.items || [])[subsection.parentItemIndex]._id
+                                : null,
+                        parentItemIndex: typeof subsection.parentItemIndex === 'number' ? subsection.parentItemIndex : null,
+                        items: (subsection.items || []).map((item) => ({
+                            itemId: item._id,
+                            name: item.name,
+                            score: null,
+                            comment: '',
+                            status: 'pass',
+                        })),
                     })),
                 })),
                 totalScore: 0,
@@ -186,17 +268,25 @@ const ImprovedInspectionWizard = () => {
         }
     };
 
-    const handleItemResponse = (sectionId, itemId, value, comment = '', photos = []) => {
+    const handleItemResponse = (sectionId, itemId, value, comment = '', photos = [], subsectionId = null) => {
         setResponses({
             ...responses,
-            [`${sectionId}-${itemId}`]: { value, comment, photos }
+            [getResponseKey(sectionId, itemId, subsectionId)]: { value, comment, photos }
         });
 
         // Check if item failed
         if (value === 'fail' || (typeof value === 'number' && value < 3)) {
-            const section = template.sections.find(s => s._id === sectionId);
-            const item = section.items.find(i => i._id === itemId);
-            setShowTicketPrompt({ item, section, itemId, sectionId });
+            const context = findItemContext(sectionId, itemId, subsectionId);
+            if (context) {
+                setShowTicketPrompt({
+                    item: context.item,
+                    section: context.section,
+                    subsection: context.subsection,
+                    itemId,
+                    sectionId,
+                    subsectionId,
+                });
+            }
         }
     };
 
@@ -214,6 +304,14 @@ const ImprovedInspectionWizard = () => {
     };
 
     const goToNextSection = () => {
+        const currentSection = template.sections[currentSectionIndex];
+        if (currentSection?.sectionPrompt?.required) {
+            const promptValue = sectionPromptValues[getSectionPromptKey(currentSection._id)] || '';
+            if (!promptValue.trim()) {
+                toast.error(`${currentSection.sectionPrompt.label || 'Section prompt'} is required`);
+                return;
+            }
+        }
         if (currentSectionIndex < template.sections.length - 1) {
             setCurrentSectionIndex(currentSectionIndex + 1);
         } else {
@@ -232,8 +330,8 @@ const ImprovedInspectionWizard = () => {
         let earnedWeight = 0;
 
         template.sections.forEach(section => {
-            section.items.forEach(item => {
-                const response = responses[`${section._id}-${item._id}`];
+            (section.items || []).forEach(item => {
+                const response = responses[getResponseKey(section._id, item._id)];
                 totalWeight += item.weight || 1;
 
                 if (response) {
@@ -243,6 +341,20 @@ const ImprovedInspectionWizard = () => {
                         earnedWeight += ((response.value / 5) * (item.weight || 1));
                     }
                 }
+            });
+            (section.subsections || []).forEach(subsection => {
+                (subsection.items || []).forEach(item => {
+                    const response = responses[getResponseKey(section._id, item._id, subsection._id)];
+                    totalWeight += item.weight || 1;
+
+                    if (response) {
+                        if (response.value === 'pass' || response.value === 'yes') {
+                            earnedWeight += item.weight || 1;
+                        } else if (typeof response.value === 'number') {
+                            earnedWeight += ((response.value / 5) * (item.weight || 1));
+                        }
+                    }
+                });
             });
         });
 
@@ -260,8 +372,16 @@ const ImprovedInspectionWizard = () => {
             const sections = template.sections.map(section => ({
                 sectionId: section._id,
                 name: section.name,
-                items: section.items.map(item => {
-                    const response = responses[`${section._id}-${item._id}`] || {};
+                sectionPrompt: section.sectionPrompt?.label
+                    ? {
+                          label: section.sectionPrompt.label,
+                          placeholder: section.sectionPrompt.placeholder || 'Add comment...',
+                          required: Boolean(section.sectionPrompt.required),
+                          value: (sectionPromptValues[getSectionPromptKey(section._id)] || '').trim(),
+                      }
+                    : undefined,
+                items: (section.items || []).map(item => {
+                    const response = responses[getResponseKey(section._id, item._id)] || {};
                     return {
                         itemId: item._id,
                         name: item.name,
@@ -271,7 +391,34 @@ const ImprovedInspectionWizard = () => {
                         photos: response.photos || [],
                     };
                 }),
+                subsections: (section.subsections || []).map(subsection => ({
+                    subsectionId: subsection._id,
+                    name: subsection.name,
+                    parentItemId:
+                        typeof subsection.parentItemIndex === 'number' && (section.items || [])[subsection.parentItemIndex]
+                            ? (section.items || [])[subsection.parentItemIndex]._id
+                            : (subsection.parentItemId || null),
+                    parentItemIndex: typeof subsection.parentItemIndex === 'number' ? subsection.parentItemIndex : null,
+                    items: (subsection.items || []).map(item => {
+                        const response = responses[getResponseKey(section._id, item._id, subsection._id)] || {};
+                        return {
+                            itemId: item._id,
+                            name: item.name,
+                            score: typeof response.value === 'number' ? response.value : null,
+                            status: response.value === 'pass' || response.value === 'yes' ? 'pass' : 'fail',
+                            comment: response.comment || '',
+                            photos: response.photos || [],
+                        };
+                    }),
+                })),
             }));
+
+            for (const section of sections) {
+                if (section.sectionPrompt?.label && section.sectionPrompt.value === '' && section.sectionPrompt.required) {
+                    toast.error(`${section.sectionPrompt.label} is required`);
+                    return;
+                }
+            }
 
             const inspectionData = {
                 template: selectedTemplate,
@@ -878,63 +1025,229 @@ const ImprovedInspectionWizard = () => {
                     <span className="section-count">Section {currentSectionIndex + 1} of {template.sections.length}</span>
                 </div>
 
+                {currentSection.sectionPrompt?.label && (
+                    <div style={{ marginBottom: '16px' }}>
+                        <label style={{ display: 'block', fontWeight: 600, marginBottom: '8px', color: '#1e293b' }}>
+                            {currentSection.sectionPrompt.label}
+                            {currentSection.sectionPrompt.required ? ' *' : ''}
+                        </label>
+                        <input
+                            type="text"
+                            className="form-control"
+                            value={sectionPromptValues[getSectionPromptKey(currentSection._id)] || ''}
+                            onChange={(e) =>
+                                setSectionPromptValues(prev => ({
+                                    ...prev,
+                                    [getSectionPromptKey(currentSection._id)]: e.target.value,
+                                }))
+                            }
+                            placeholder={currentSection.sectionPrompt.placeholder || 'Add comment...'}
+                        />
+                    </div>
+                )}
+
                 <div className="items-list">
-                    {currentSection.items.map(item => {
-                        const responseKey = `${currentSection._id}-${item._id}`;
+                    {(currentSection.items || []).map((item, iIdx) => {
+                        const responseKey = getResponseKey(currentSection._id, item._id);
                         const currentResponse = responses[responseKey] || {};
 
                         return (
-                            <div key={item._id} className="item-card">
-                                <h4>{item.name}</h4>
-                                {item.description && <p className="item-desc">{item.description}</p>}
+                            <div key={item._id}>
+                                <div className="item-card">
+                                    <h4>{item.name}</h4>
+                                    {item.description && <p className="item-desc">{item.description}</p>}
 
-                                <div className="item-controls">
-                                    {item.type === 'pass_fail' && (
-                                        <div className="button-group">
-                                            <button
-                                                className={`btn ${currentResponse.value === 'pass' ? 'btn-success-active' : 'btn-outline'}`}
-                                                onClick={() => handleItemResponse(currentSection._id, item._id, 'pass')}
-                                            >
-                                                Pass
-                                            </button>
-                                            <button
-                                                className={`btn ${currentResponse.value === 'fail' ? 'btn-danger-active' : 'btn-outline'}`}
-                                                onClick={() => handleItemResponse(currentSection._id, item._id, 'fail')}
-                                            >
-                                                Fail
-                                            </button>
-                                        </div>
-                                    )}
-
-                                    {item.type === 'rating_1_5' && (
-                                        <div className="rating-group">
-                                            {[1, 2, 3, 4, 5].map(num => (
+                                    <div className="item-controls">
+                                        {item.type === 'pass_fail' && (
+                                            <div className="button-group">
                                                 <button
-                                                    key={num}
-                                                    className={`rating-btn ${currentResponse.value === num ? 'active' : ''}`}
-                                                    onClick={() => handleItemResponse(currentSection._id, item._id, num)}
+                                                    className={`btn ${currentResponse.value === 'pass' ? 'btn-success-active' : 'btn-outline'}`}
+                                                    onClick={() => handleItemResponse(currentSection._id, item._id, 'pass')}
                                                 >
-                                                    {num}
+                                                    Pass
                                                 </button>
-                                            ))}
-                                        </div>
-                                    )}
+                                                <button
+                                                    className={`btn ${currentResponse.value === 'fail' ? 'btn-danger-active' : 'btn-outline'}`}
+                                                    onClick={() => handleItemResponse(currentSection._id, item._id, 'fail')}
+                                                >
+                                                    Fail
+                                                </button>
+                                            </div>
+                                        )}
 
-                                    <textarea
-                                        placeholder="Add comment (optional)"
-                                        value={currentResponse.comment || ''}
-                                        onChange={(e) => handleItemResponse(currentSection._id, item._id, currentResponse.value, e.target.value, currentResponse.photos)}
-                                        rows="2"
-                                    />
+                                        {item.type === 'rating_1_5' && (
+                                            <div className="rating-group">
+                                                {[1, 2, 3, 4, 5].map(num => (
+                                                    <button
+                                                        key={num}
+                                                        className={`rating-btn ${currentResponse.value === num ? 'active' : ''}`}
+                                                        onClick={() => handleItemResponse(currentSection._id, item._id, num)}
+                                                    >
+                                                        {num}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
 
-                                    <PhotoUpload
-                                        existingPhotos={currentResponse.photos || []}
-                                        onPhotosUploaded={(photos) => handleItemResponse(currentSection._id, item._id, currentResponse.value, currentResponse.comment, photos)}
-                                    />
+                                        <textarea
+                                            placeholder="Add comment (optional)"
+                                            value={currentResponse.comment || ''}
+                                            onChange={(e) => handleItemResponse(currentSection._id, item._id, currentResponse.value, e.target.value, currentResponse.photos)}
+                                            rows="2"
+                                        />
+
+                                        <PhotoUpload
+                                            existingPhotos={currentResponse.photos || []}
+                                            onPhotosUploaded={(photos) => handleItemResponse(currentSection._id, item._id, currentResponse.value, currentResponse.comment, photos)}
+                                        />
+                                    </div>
                                 </div>
+
+                                {(currentSection.subsections || [])
+                                    .filter(
+                                        subsection =>
+                                            (subsection.parentItemId && subsection.parentItemId.toString() === item._id.toString()) ||
+                                            (!subsection.parentItemId &&
+                                                typeof subsection.parentItemIndex === 'number' &&
+                                                subsection.parentItemIndex === iIdx),
+                                    )
+                                    .map(subsection => (
+                                        <div key={subsection._id} style={{ margin: '6px 0 14px 26px' }}>
+                                            <h3 style={{ margin: '8px 0 14px 0', fontSize: '18px', color: '#1e293b' }}>
+                                                {subsection.name}
+                                            </h3>
+                                            {(subsection.items || []).map(item => {
+                                                const subResponseKey = getResponseKey(currentSection._id, item._id, subsection._id);
+                                                const subCurrentResponse = responses[subResponseKey] || {};
+
+                                                return (
+                                                    <div key={item._id} className="item-card">
+                                                        <h4>{item.name}</h4>
+                                                        {item.description && <p className="item-desc">{item.description}</p>}
+
+                                                        <div className="item-controls">
+                                                            {item.type === 'pass_fail' && (
+                                                                <div className="button-group">
+                                                                    <button
+                                                                        className={`btn ${subCurrentResponse.value === 'pass' ? 'btn-success-active' : 'btn-outline'}`}
+                                                                        onClick={() => handleItemResponse(currentSection._id, item._id, 'pass', subCurrentResponse.comment, subCurrentResponse.photos, subsection._id)}
+                                                                    >
+                                                                        Pass
+                                                                    </button>
+                                                                    <button
+                                                                        className={`btn ${subCurrentResponse.value === 'fail' ? 'btn-danger-active' : 'btn-outline'}`}
+                                                                        onClick={() => handleItemResponse(currentSection._id, item._id, 'fail', subCurrentResponse.comment, subCurrentResponse.photos, subsection._id)}
+                                                                    >
+                                                                        Fail
+                                                                    </button>
+                                                                </div>
+                                                            )}
+
+                                                            {item.type === 'rating_1_5' && (
+                                                                <div className="rating-group">
+                                                                    {[1, 2, 3, 4, 5].map(num => (
+                                                                        <button
+                                                                            key={num}
+                                                                            className={`rating-btn ${subCurrentResponse.value === num ? 'active' : ''}`}
+                                                                            onClick={() => handleItemResponse(currentSection._id, item._id, num, subCurrentResponse.comment, subCurrentResponse.photos, subsection._id)}
+                                                                        >
+                                                                            {num}
+                                                                        </button>
+                                                                    ))}
+                                                                </div>
+                                                            )}
+
+                                                            <textarea
+                                                                placeholder="Add comment (optional)"
+                                                                value={subCurrentResponse.comment || ''}
+                                                                onChange={(e) => handleItemResponse(currentSection._id, item._id, subCurrentResponse.value, e.target.value, subCurrentResponse.photos, subsection._id)}
+                                                                rows="2"
+                                                            />
+
+                                                            <PhotoUpload
+                                                                existingPhotos={subCurrentResponse.photos || []}
+                                                                onPhotosUploaded={(photos) => handleItemResponse(currentSection._id, item._id, subCurrentResponse.value, subCurrentResponse.comment, photos, subsection._id)}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    ))}
                             </div>
                         );
                     })}
+
+                    {(currentSection.subsections || [])
+                        .filter(
+                            subsection =>
+                                !subsection.parentItemId &&
+                                (typeof subsection.parentItemIndex !== 'number' ||
+                                    subsection.parentItemIndex >= (currentSection.items || []).length),
+                        )
+                        .map(subsection => (
+                        <div key={subsection._id} style={{ marginTop: '8px' }}>
+                            <h3 style={{ margin: '8px 0 14px 0', fontSize: '18px', color: '#1e293b' }}>
+                                {subsection.name}
+                            </h3>
+                            {(subsection.items || []).map(item => {
+                                const responseKey = getResponseKey(currentSection._id, item._id, subsection._id);
+                                const currentResponse = responses[responseKey] || {};
+
+                                return (
+                                    <div key={item._id} className="item-card">
+                                        <h4>{item.name}</h4>
+                                        {item.description && <p className="item-desc">{item.description}</p>}
+
+                                        <div className="item-controls">
+                                            {item.type === 'pass_fail' && (
+                                                <div className="button-group">
+                                                    <button
+                                                        className={`btn ${currentResponse.value === 'pass' ? 'btn-success-active' : 'btn-outline'}`}
+                                                        onClick={() => handleItemResponse(currentSection._id, item._id, 'pass', currentResponse.comment, currentResponse.photos, subsection._id)}
+                                                    >
+                                                        Pass
+                                                    </button>
+                                                    <button
+                                                        className={`btn ${currentResponse.value === 'fail' ? 'btn-danger-active' : 'btn-outline'}`}
+                                                        onClick={() => handleItemResponse(currentSection._id, item._id, 'fail', currentResponse.comment, currentResponse.photos, subsection._id)}
+                                                    >
+                                                        Fail
+                                                    </button>
+                                                </div>
+                                            )}
+
+                                            {item.type === 'rating_1_5' && (
+                                                <div className="rating-group">
+                                                    {[1, 2, 3, 4, 5].map(num => (
+                                                        <button
+                                                            key={num}
+                                                            className={`rating-btn ${currentResponse.value === num ? 'active' : ''}`}
+                                                            onClick={() => handleItemResponse(currentSection._id, item._id, num, currentResponse.comment, currentResponse.photos, subsection._id)}
+                                                        >
+                                                            {num}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
+
+                                            <textarea
+                                                placeholder="Add comment (optional)"
+                                                value={currentResponse.comment || ''}
+                                                onChange={(e) => handleItemResponse(currentSection._id, item._id, currentResponse.value, e.target.value, currentResponse.photos, subsection._id)}
+                                                rows="2"
+                                            />
+
+                                            <PhotoUpload
+                                                existingPhotos={currentResponse.photos || []}
+                                                onPhotosUploaded={(photos) => handleItemResponse(currentSection._id, item._id, currentResponse.value, currentResponse.comment, photos, subsection._id)}
+                                            />
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    ))}
                 </div>
 
                 <div className="wizard-actions">

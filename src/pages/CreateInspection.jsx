@@ -79,12 +79,36 @@ const CreateInspection = () => {
                 sections: selectedTemplate.sections.map((section) => ({
                     sectionId: section._id,
                     name: section.name,
-                    items: section.items.map((item) => ({
+                    sectionPrompt: section.sectionPrompt?.label
+                        ? {
+                              label: section.sectionPrompt.label,
+                              placeholder: section.sectionPrompt.placeholder || 'Add comment...',
+                              required: Boolean(section.sectionPrompt.required),
+                              value: '',
+                          }
+                        : undefined,
+                    items: (section.items || []).map((item) => ({
                         itemId: item._id,
                         name: item.name,
                         score: null,
                         comment: '',
                         status: 'pass',
+                    })),
+                    subsections: (section.subsections || []).map((subsection) => ({
+                        subsectionId: subsection._id,
+                        name: subsection.name,
+                        parentItemId:
+                            typeof subsection.parentItemIndex === 'number' && (section.items || [])[subsection.parentItemIndex]
+                                ? (section.items || [])[subsection.parentItemIndex]._id
+                                : null,
+                        parentItemIndex: typeof subsection.parentItemIndex === 'number' ? subsection.parentItemIndex : null,
+                        items: (subsection.items || []).map((item) => ({
+                            itemId: item._id,
+                            name: item.name,
+                            score: null,
+                            comment: '',
+                            status: 'pass',
+                        })),
                     })),
                 })),
             };

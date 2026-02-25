@@ -121,6 +121,17 @@ const InspectionDetails = () => {
                     failedItems.push({ ...item, sectionName: section.name });
                 }
             });
+            (section.subsections || []).forEach(subsection => {
+                (subsection.items || []).forEach(item => {
+                    if (item.status === 'fail') {
+                        failedItems.push({
+                            ...item,
+                            sectionName: section.name,
+                            subsectionName: subsection.name,
+                        });
+                    }
+                });
+            });
         });
         return failedItems;
     };
@@ -129,7 +140,7 @@ const InspectionDetails = () => {
         const failedItems = getAllFailedItems();
         const title = `Multiple Issues - ${inspection.location?.name}`;
         const description = failedItems.map((item, idx) =>
-            `${idx + 1}. ${item.sectionName} - ${item.name}: ${item.comment || 'Failed'}`
+            `${idx + 1}. ${item.subsectionName ? `${item.sectionName} > ${item.subsectionName}` : item.sectionName} - ${item.name}: ${item.comment || 'Failed'}`
         ).join('\n');
 
         navigate('/tickets/new', {
@@ -241,38 +252,149 @@ const InspectionDetails = () => {
                     {inspection.sections?.map((section, idx) => (
                         <div key={idx} className="section-item">
                             <h3>{section.name}</h3>
+                            {section.sectionPrompt?.label && (
+                                <div
+                                    style={{
+                                        marginBottom: '10px',
+                                        padding: '10px 12px',
+                                        border: '1px solid #e2e8f0',
+                                        borderRadius: '8px',
+                                        background: '#f8fafc',
+                                    }}
+                                >
+                                    <div style={{ fontSize: '13px', color: '#475569', marginBottom: '4px' }}>
+                                        {section.sectionPrompt.label}
+                                    </div>
+                                    <div style={{ fontWeight: 500, color: '#1e293b' }}>
+                                        {section.sectionPrompt.value || '-'}
+                                    </div>
+                                </div>
+                            )}
                             <div className="items-grid">
                                 {section.items?.map((item, itemIdx) => (
-                                    <div key={itemIdx} className={`item-row ${item.status}`}>
-                                        <div className="item-name">
-                                            <span className={`status-dot ${item.status}`}></span>
-                                            {item.name}
+                                    <div key={itemIdx}>
+                                        <div className={`item-row ${item.status}`}>
+                                            <div className="item-name">
+                                                <span className={`status-dot ${item.status}`}></span>
+                                                {item.name}
+                                            </div>
+                                            <div className="item-details">
+                                                {item.score && <span className="item-score">{item.score}/5</span>}
+                                                {item.comment && <span className="item-comment">{item.comment}</span>}
+                                                {item.status === 'fail' && (user?.role === 'admin' || user?.role === 'sub_admin') && (
+                                                    <button
+                                                        className="create-ticket-btn"
+                                                        onClick={() => {
+                                                            navigate('/tickets/new', {
+                                                                state: {
+                                                                    title: `Issue: ${item.name}`,
+                                                                    description: item.comment || `Failed inspection item: ${item.name}`,
+                                                                    location: inspection.location?._id,
+                                                                    inspection: inspection._id,
+                                                                    priority: 'high'
+                                                                }
+                                                            });
+                                                        }}
+                                                    >
+                                                        Create Ticket
+                                                    </button>
+                                                )}
+                                            </div>
                                         </div>
-                                        <div className="item-details">
-                                            {item.score && <span className="item-score">{item.score}/5</span>}
-                                            {item.comment && <span className="item-comment">{item.comment}</span>}
-                                            {item.status === 'fail' && (user?.role === 'admin' || user?.role === 'sub_admin') && (
-                                                <button
-                                                    className="create-ticket-btn"
-                                                    onClick={() => {
-                                                        navigate('/tickets/new', {
-                                                            state: {
-                                                                title: `Issue: ${item.name}`,
-                                                                description: item.comment || `Failed inspection item: ${item.name}`,
-                                                                location: inspection.location?._id,
-                                                                inspection: inspection._id,
-                                                                priority: 'high'
-                                                            }
-                                                        });
-                                                    }}
-                                                >
-                                                    Create Ticket
-                                                </button>
-                                            )}
-                                        </div>
+
+                                        {(section.subsections || [])
+                                            .filter(
+                                                subsection =>
+                                                    (subsection.parentItemId && subsection.parentItemId.toString() === (item.itemId || item._id)?.toString()) ||
+                                                    (!subsection.parentItemId &&
+                                                        typeof subsection.parentItemIndex === 'number' &&
+                                                        subsection.parentItemIndex === itemIdx),
+                                            )
+                                            .map((subsection, ssIdx) => (
+                                                <div key={`${idx}-${ssIdx}`} style={{ margin: '8px 0 8px 20px' }}>
+                                                    <h4 style={{ margin: '0 0 10px 0', fontSize: '15px', color: '#334155' }}>{subsection.name}</h4>
+                                                    <div className="items-grid">
+                                                        {(subsection.items || []).map((subItem, subItemIdx) => (
+                                                            <div key={`${ssIdx}-${subItemIdx}`} className={`item-row ${subItem.status}`}>
+                                                                <div className="item-name">
+                                                                    <span className={`status-dot ${subItem.status}`}></span>
+                                                                    {subItem.name}
+                                                                </div>
+                                                                <div className="item-details">
+                                                                    {subItem.score && <span className="item-score">{subItem.score}/5</span>}
+                                                                    {subItem.comment && <span className="item-comment">{subItem.comment}</span>}
+                                                                    {subItem.status === 'fail' && (user?.role === 'admin' || user?.role === 'sub_admin') && (
+                                                                        <button
+                                                                            className="create-ticket-btn"
+                                                                            onClick={() => {
+                                                                                navigate('/tickets/new', {
+                                                                                    state: {
+                                                                                        title: `Issue: ${subItem.name}`,
+                                                                                        description: subItem.comment || `Failed inspection item: ${section.name} > ${subsection.name} > ${subItem.name}`,
+                                                                                        location: inspection.location?._id,
+                                                                                        inspection: inspection._id,
+                                                                                        priority: 'high'
+                                                                                    }
+                                                                                });
+                                                                            }}
+                                                                        >
+                                                                            Create Ticket
+                                                                        </button>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            ))}
                                     </div>
                                 ))}
                             </div>
+
+                            {(section.subsections || [])
+                                .filter(
+                                    subsection =>
+                                        !subsection.parentItemId &&
+                                        (typeof subsection.parentItemIndex !== 'number' ||
+                                            subsection.parentItemIndex >= (section.items || []).length),
+                                )
+                                .map((subsection, ssIdx) => (
+                                <div key={`${idx}-${ssIdx}`} style={{ marginTop: '12px' }}>
+                                    <h4 style={{ margin: '0 0 10px 0', fontSize: '15px', color: '#334155' }}>{subsection.name}</h4>
+                                    <div className="items-grid">
+                                        {(subsection.items || []).map((item, itemIdx) => (
+                                            <div key={`${ssIdx}-${itemIdx}`} className={`item-row ${item.status}`}>
+                                                <div className="item-name">
+                                                    <span className={`status-dot ${item.status}`}></span>
+                                                    {item.name}
+                                                </div>
+                                                <div className="item-details">
+                                                    {item.score && <span className="item-score">{item.score}/5</span>}
+                                                    {item.comment && <span className="item-comment">{item.comment}</span>}
+                                                    {item.status === 'fail' && (user?.role === 'admin' || user?.role === 'sub_admin') && (
+                                                        <button
+                                                            className="create-ticket-btn"
+                                                            onClick={() => {
+                                                                navigate('/tickets/new', {
+                                                                    state: {
+                                                                        title: `Issue: ${item.name}`,
+                                                                        description: item.comment || `Failed inspection item: ${section.name} > ${subsection.name} > ${item.name}`,
+                                                                        location: inspection.location?._id,
+                                                                        inspection: inspection._id,
+                                                                        priority: 'high'
+                                                                    }
+                                                                });
+                                                            }}
+                                                        >
+                                                            Create Ticket
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            ))}
                         </div>
                     ))}
                 </div>
