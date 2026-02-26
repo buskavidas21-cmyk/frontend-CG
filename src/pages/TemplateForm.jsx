@@ -530,13 +530,11 @@ const TemplateForm = () => {
                             <button type="button" className="btn btn-ghost btn-sm" onClick={() => addItem(sIdx)}>
                                 <Plus size={14} /> Add Item
                             </button>
-                            {section.items.length === 0 && (
-                                <div style={{ marginTop: '12px' }}>
-                                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => addSubsection(sIdx)}>
-                                        <Plus size={14} /> Add Sub-area
-                                    </button>
-                                </div>
-                            )}
+                            <div style={{ marginTop: '12px' }}>
+                                <button type="button" className="btn btn-ghost btn-sm" onClick={() => addSubsection(sIdx, null)}>
+                                    <Plus size={14} /> Add Sub-area (Section Level)
+                                </button>
+                            </div>
 
                             {(section.subsections || [])
                                 .map((subsection, ssIdx) => ({ subsection, ssIdx }))

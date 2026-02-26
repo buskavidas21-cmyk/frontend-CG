@@ -76,6 +76,7 @@ const ImprovedInspectionWizard = () => {
 
                     // Fetch the FULL template details if we don't have them in the inspection object
                     let fullTemplate;
+                    let templateTypeMap = new Map();
 
                     console.log('Inspection Data:', {
                         hasTemplate: !!inspection.template,
@@ -85,6 +86,22 @@ const ImprovedInspectionWizard = () => {
                     });
 
                     if (inspection.sections && inspection.sections.length > 0) {
+                        try {
+                            const { data: tmpl } = await axios.get(`${apiBaseUrl}/templates/${templateId}`, config);
+                            (tmpl.sections || []).forEach(section => {
+                                (section.items || []).forEach(item => {
+                                    templateTypeMap.set(`${section._id}-${item._id}`, item.type || 'pass_fail');
+                                });
+                                (section.subsections || []).forEach(subsection => {
+                                    (subsection.items || []).forEach(item => {
+                                        templateTypeMap.set(`${section._id}-${subsection._id}-${item._id}`, item.type || 'pass_fail');
+                                    });
+                                });
+                            });
+                        } catch (err) {
+                            console.warn('Could not fetch template types for fallback', err);
+                        }
+
                         // PRIORITIZE SNAPSHOT: Construct template from inspection snapshot
                         // Map sectionId -> _id and itemId -> _id to match Wizard expectation
                         fullTemplate = {
@@ -96,7 +113,8 @@ const ImprovedInspectionWizard = () => {
                                 sectionPrompt: s.sectionPrompt || undefined,
                                 items: s.items.map(i => ({
                                     ...i,
-                                    _id: i.itemId || i._id
+                                    _id: i.itemId || i._id,
+                                    type: i.type || templateTypeMap.get(`${s.sectionId || s._id}-${i.itemId || i._id}`) || 'pass_fail',
                                 })),
                                 subsections: (s.subsections || []).map(ss => ({
                                     ...ss,
@@ -106,6 +124,10 @@ const ImprovedInspectionWizard = () => {
                                     items: (ss.items || []).map(i => ({
                                         ...i,
                                         _id: i.itemId || i._id,
+                                        type:
+                                            i.type ||
+                                            templateTypeMap.get(`${s.sectionId || s._id}-${ss.subsectionId || ss._id}-${i.itemId || i._id}`) ||
+                                            'pass_fail',
                                     })),
                                 })),
                             }))
@@ -235,6 +257,7 @@ const ImprovedInspectionWizard = () => {
                     items: (section.items || []).map((item) => ({
                         itemId: item._id,
                         name: item.name,
+                        type: item.type || 'pass_fail',
                         score: null,
                         comment: '',
                         status: 'pass', // Default status
@@ -250,6 +273,7 @@ const ImprovedInspectionWizard = () => {
                         items: (subsection.items || []).map((item) => ({
                             itemId: item._id,
                             name: item.name,
+                            type: item.type || 'pass_fail',
                             score: null,
                             comment: '',
                             status: 'pass',
@@ -385,6 +409,7 @@ const ImprovedInspectionWizard = () => {
                     return {
                         itemId: item._id,
                         name: item.name,
+                        type: item.type || 'pass_fail',
                         score: typeof response.value === 'number' ? response.value : null,
                         status: response.value === 'pass' || response.value === 'yes' ? 'pass' : 'fail',
                         comment: response.comment || '',
@@ -404,6 +429,7 @@ const ImprovedInspectionWizard = () => {
                         return {
                             itemId: item._id,
                             name: item.name,
+                            type: item.type || 'pass_fail',
                             score: typeof response.value === 'number' ? response.value : null,
                             status: response.value === 'pass' || response.value === 'yes' ? 'pass' : 'fail',
                             comment: response.comment || '',

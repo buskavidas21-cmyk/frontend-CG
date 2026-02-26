@@ -90,6 +90,7 @@ const CreateInspection = () => {
                     items: (section.items || []).map((item) => ({
                         itemId: item._id,
                         name: item.name,
+                        type: item.type || 'pass_fail',
                         score: null,
                         comment: '',
                         status: 'pass',
@@ -105,6 +106,7 @@ const CreateInspection = () => {
                         items: (subsection.items || []).map((item) => ({
                             itemId: item._id,
                             name: item.name,
+                            type: item.type || 'pass_fail',
                             score: null,
                             comment: '',
                             status: 'pass',
